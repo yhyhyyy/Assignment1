@@ -1,0 +1,155 @@
+---
+title: "assignment 1"
+author: "Haoyu"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## Step 1
+```{r}
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+data_2022 <- data.table::fread("2022_pm2.5.csv")
+data_2002 <- data.table::fread("2002_pm2.5.csv")
+dim(data_2002)
+dim(data_2022)
+head(data_2002)
+head(data_2022)
+tail(data_2002)
+tail(data_2022)
+summary(data_2002)
+summary(data_2022)
+names(data_2002)
+names(data_2022)
+sum(is.na(data_2002$State))
+sum(is.na(data_2022$State))
+```
+It can be seen from the statistical data that these two data sets mainly provide detailed statistics on the pm2.5 pollutant content in California, including different regions. There are missing values in "CBSA Name".
+
+## Step 2
+```{r}
+data_2002 <- data_2002 %>%
+  mutate(Year = 2002)
+data_2022 <- data_2022 %>%
+  mutate(Year = 2022)
+combined_data <- rbind(data_2002, data_2022)
+setnames(combined_data, old = "Daily Mean PM2.5 Concentration", new = "PM2.5")
+setnames(combined_data, old = "Site Latitude", new = "Lat")
+setnames(combined_data, old = "Site Longitude", new = "Lon")
+setnames(combined_data, old = "Local Site Name", new = "Site")
+setnames(combined_data, old = "CBSA Name", new = "City")
+```
+
+## Step 3
+```{r}
+library(leaflet)
+Sites <- combined_data %>%
+  select(Site, Lon, Lat, Year) %>%
+  distinct()
+
+
+color_palette <- colorFactor(palette = c("red","blue"), 
+                             levels = unique(Sites$Year))
+leaflet(Sites) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    ~Lon, ~Lat, 
+    color = ~color_palette(Year), 
+    radius = 5,
+    stroke = FALSE,
+    fillOpacity = 0.5,
+    popup = ~Site, 
+    label = ~paste("Year:", Year, "Site:", Site)) %>%
+  addLegend(
+    "bottomright", 
+    pal = colorFactor(palette = c("red", "blue"), 
+                      levels = unique(Sites$Year)),
+    values = unique(Sites$Year),
+    title = "Year",
+    opacity = 1
+  )
+```
+These stations are mainly concentrated in Los Angeles and San Francisco. I guess it is because these two places are economically developed large cities in California with large populations and a great impact of air pollution, so there are more stations for easy observation.
+
+## Step 4
+
+```{r}
+combined_data %>%
+  summarise(
+    missing_values = sum(is.na(PM2.5)),
+    min_PM2.5 = min(PM2.5, na.rm = TRUE),
+    max_PM2.5 = max(PM2.5, na.rm = TRUE),
+    outliers = sum(PM2.5 < 0 | PM2.5 > 500)
+  )
+combined_data <- combined_data %>%
+  filter(PM2.5 >= 0)
+```
+From the statistical data, some PM2.5 values are less than 0. This is unreasonable and needs to be deleted.
+
+## Step 5
+
+```{r}
+# state
+ggplot(combined_data, aes(x = factor(Year), y = PM2.5, fill = factor(Year))) +
+  geom_boxplot() +
+  labs(title = "PM2.5 Concentrations in 2002 vs 2022", 
+       x = "Year", 
+       y = "PM2.5 Concentration") +
+  theme_minimal()
+
+ggplot(combined_data, aes(x = PM2.5, fill = factor(Year))) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Density Plot of PM2.5 Concentrations by Year", x = "PM2.5 Concentration", y = "Density") +
+  theme_minimal()
+
+ggplot(combined_data, aes(x = PM2.5)) +
+  geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of PM2.5 Concentrations by Year", 
+       x = "PM2.5 Concentration", 
+       y = "Frequency") +
+  facet_wrap(~ Year) +  
+  theme_minimal()
+```
+From the perspective of California, the pm2.5 content in 2022 is overall lower than that in 2002, but the maximum value is larger than that in 2002.
+
+```{r}
+# county
+county_summary <- combined_data %>%
+  group_by(County) %>%
+  summarise(mean_PM2.5 = mean(PM2.5, na.rm = TRUE)) %>%
+  arrange(desc(mean_PM2.5))
+
+top_counties <- county_summary %>%
+  top_n(10, mean_PM2.5)
+
+ggplot(combined_data %>% filter(County %in% top_counties$County), aes(x = County, y = PM2.5, fill = factor(Year))) +
+  geom_boxplot() +
+  labs(title = "Top 10 PM2.5 Concentrations by County", 
+       x = "County", 
+       y = "PM2.5 Concentration") 
+```
+From the perspective of County, due to the large amount of data, I selected the 10 counties with the highest PM2.5 content to create a box plot. It was found that the overall pm2.5 content in each city in 2022 was lower than in 2002, proving that air pollution in California has improved significantly in the past 20 years.
+
+```{r}
+# LA
+la_data <- combined_data %>%
+  filter(City == "Los Angeles-Long Beach-Anaheim, CA")
+
+ggplot(la_data, aes(x = Date, y = PM2.5)) +
+  geom_line(color = "blue") +
+  labs(title = "PM2.5 Concentration Over Time in Los Angeles", 
+       x = "Date", 
+       y = "PM2.5 Concentration") +
+  theme_minimal()
+
+ggplot(la_data, aes(x = factor(Year), y = PM2.5, fill = factor(Year))) +
+  geom_boxplot() +
+  labs(title = "PM2.5 Concentrations in Los Angeles by Year", 
+       x = "Year", 
+       y = "PM2.5 Concentration") +
+  theme_minimal()
+```
+From the perspective of LA, whether it is the maximum value or overall, the pm2.5 content in 2022 is smaller than that in 2002.
+
